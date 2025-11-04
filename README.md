@@ -181,7 +181,22 @@ All user settings and reminders are stored in `reminder.json`. Structure:
    - Cron jobs each live in their own goroutine, gracefully stopped on cancel.
 
 ---
+## docker
+
+```
+docker build -t reminder-bot:latest .
+```
+
+```
+docker run -d \
+  --restart unless-stopped \
+  --name reminder-bot \
+  -v /root/docker/reminder-bot/config.json:/root/config.json \
+  -v /root/docker/reminder-bot/reminder.json:/root/reminder.json \
+  reminder-bot:latest
+```
 
 ## 🔗 References
+
 
 https://github.com/dome272/Telegram-Reminder-Bot
