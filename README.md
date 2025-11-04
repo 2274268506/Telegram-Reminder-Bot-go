@@ -92,8 +92,8 @@ docker build -t reminder-bot:latest .
 docker run -d \
   --restart unless-stopped \
   --name reminder-bot \
-  -v /root/docker/reminder-bot/config.json:/root/config.json \
-  -v /root/docker/reminder-bot/reminder.json:/root/reminder.json \
+  -v $PWD/config.json:/root/config.json \
+  -v $PWD/reminder.json:/root/reminder.json \
   reminder-bot:latest
 ```
 ## 🤖 Bot Commands
@@ -200,6 +200,7 @@ All user settings and reminders are stored in `reminder.json`. Structure:
 
 
 https://github.com/dome272/Telegram-Reminder-Bot
+
 
 
 
