@@ -15,7 +15,7 @@ import (
   tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
 
-// --------- 配置 ---------
+// --------- Config ---------
 type Config struct {
   Token string `json:"token"`
 }
@@ -35,16 +35,16 @@ func loadConfig(path string) (*Config, error) {
   return &cfg, nil
 }
 
-// --------- 存储 ---------
+// --------- Storage ---------
 type Reminder struct {
-  Name          string `json:"name"`
-  Date          string `json:"date"`               // 一次性提醒用
-  Time          string `json:"time"`               // 一次性提醒用
-  ID            int    `json:"id"`
-  OptInfo       string `json:"opt_inf"`
-  CronOriginal  string `json:"cron_original,omitempty"` // 用户原始表达式
-  TZ            string `json:"tz,omitempty"`
-  CronExpr      string `json:"cron_expr,omitempty"`
+  Name         string `json:"name"`
+  Date         string `json:"date"`               // Used for one-time reminder
+  Time         string `json:"time"`               // Used for one-time reminder
+  ID           int    `json:"id"`
+  OptInfo      string `json:"opt_inf"`
+  CronOriginal string `json:"cron_original,omitempty"` // Original cron expression from user
+  TZ           string `json:"tz,omitempty"`
+  CronExpr     string `json:"cron_expr,omitempty"`
 }
 
 type UserData struct {
@@ -63,10 +63,10 @@ var (
   bot         *tgbotapi.BotAPI
   sessions    = make(map[int64]*Session)
   sessMu      sync.Mutex
-  cronQuitMap = make(map[int]chan struct{}) // 用于取消 cronexpr 调度
+  cronQuitMap = make(map[int]chan struct{}) // Used to cancel cronexpr scheduling
 )
 
-// load/save
+// loadStorage reads reminders from the JSON file or initializes storage.
 func loadStorage() error {
   store.mu.Lock()
   defer store.mu.Unlock()
@@ -87,6 +87,7 @@ func loadStorage() error {
   return nil
 }
 
+// saveStorage writes the current reminders to the JSON file.
 func saveStorage() error {
   store.mu.Lock()
   defer store.mu.Unlock()
@@ -97,6 +98,7 @@ func saveStorage() error {
   return ioutil.WriteFile("reminder.json", bs, 0644)
 }
 
+// getUserData retrieves or creates UserData for a chat.
 func getUserData(chatID int64) *UserData {
   key := strconv.FormatInt(chatID, 10)
   store.mu.Lock()
@@ -112,7 +114,7 @@ func getUserData(chatID int64) *UserData {
   return ud
 }
 
-// --------- 删除提醒 ---------
+// --------- Delete Reminder ---------
 func deleteReminder(chatID int64, rid int, head bool) {
   ud := getUserData(chatID)
   if head {
@@ -160,7 +162,7 @@ func deleteByIndex(chatID int64, idx int) bool {
   return true
 }
 
-// --------- 文本多语言 ---------
+// --------- Multilingual Text ---------
 var messages = map[string]map[string]string{
   "prompt_name":     {"en": "📍 *Reminder Setup*\n\nWhat is the name of your appointment?", "zh": "📍 *提醒设置*\n\n请输入您的日程名称："},
   "prompt_date":     {"en": "Select a date:", "zh": "请选择日期："},
@@ -209,7 +211,7 @@ func editText(chatID int64, msgID int, key string, a ...interface{}) tgbotapi.Ed
   return edit
 }
 
-// --------- 会话 ---------
+// --------- Session ---------
 type Stage int
 
 const (
@@ -251,32 +253,38 @@ func finalizeReminder(s *Session) {
   s.Temp = Reminder{}
 }
 
-// --------- 一次性 调度 ---------
+// --------- One-time Scheduling ---------
 func scheduleOnce(chatID int64, r Reminder) {
   ud := getUserData(chatID)
   dparts := strings.Split(r.Date, "/")
   day, _ := strconv.Atoi(dparts[0])
   mon, _ := strconv.Atoi(dparts[1])
   yr, _ := strconv.Atoi(dparts[2])
+
   tparts := strings.Split(r.Time, " ")
   hm := strings.Split(tparts[0], ":")
   hh, _ := strconv.Atoi(hm[0])
   mi, _ := strconv.Atoi(hm[1])
   ap := strings.ToLower(tparts[1])
+
   if ap == "pm" && hh < 12 {
     hh += 12
   }
   if ap == "am" && hh == 12 {
     hh = 0
   }
+
+  // Build event time in UTC and adjust by user's offset
   evtUTC := time.Date(yr, time.Month(mon), day, hh, mi, 0, 0, time.UTC).
     Add(-time.Duration(ud.UTC) * time.Hour)
+  // Notify 10 minutes before event
   notifyUTC := evtUTC.Add(-10 * time.Minute)
   nowUTC := time.Now().UTC()
   delay := notifyUTC.Sub(nowUTC)
   if delay <= 0 {
     delay = time.Second
   }
+
   log.Printf("[Reminder %d] at %v (in %v)\n", r.ID, notifyUTC, delay)
   time.AfterFunc(delay, func() {
     sendText(chatID, "notify", r.Name, r.Date, r.Time)
@@ -284,7 +292,7 @@ func scheduleOnce(chatID int64, r Reminder) {
   })
 }
 
-// --------- Cron 调度 （cronexpr） ---------
+// --------- Cron Scheduling (cronexpr) ---------
 func runExprJob(chatID int64, r Reminder, expr *cronexpr.Expression, loc *time.Location, quit chan struct{}) {
   for {
     now := time.Now().In(loc)
@@ -302,7 +310,7 @@ func runExprJob(chatID int64, r Reminder, expr *cronexpr.Expression, loc *time.L
   }
 }
 
-// --------- 消息 处理 ---------
+// --------- Message Handling ---------
 func handleMessage(msg *tgbotapi.Message) {
   chatID := msg.Chat.ID
   ud := getUserData(chatID)
@@ -386,41 +394,41 @@ func handleMessage(msg *tgbotapi.Message) {
       bot.Send(m)
       return
 
-	case "cron":
-		fields := strings.Fields(msg.CommandArguments())
-		if len(fields) < 7 {
-			sendText(chatID, "cron_usage")
-			return
-		}
+    case "cron":
+      fields := strings.Fields(msg.CommandArguments())
+      if len(fields) < 7 {
+        sendText(chatID, "cron_usage")
+        return
+      }
 
-		spec := strings.Join(fields[0:5], " ")
-		tzName := fields[5]
-		text := strings.Join(fields[6:], " ")
+      spec := strings.Join(fields[0:5], " ")
+      tzName := fields[5]
+      text := strings.Join(fields[6:], " ")
 
-		// 1) 加载时区
-		loc, err := time.LoadLocation(tzName)
-		if err != nil {
-			// 方案 A：直接发原始文本
-			msg := tgbotapi.NewMessage(chatID,
-				fmt.Sprintf("❌ 无效时区：%s", tzName))
-			msg.ParseMode = "Markdown"
-			bot.Send(msg)
-			return
-			// 方案 B：走 sendText，需要在 messages 里添加 err_invalid_tz key
-			// sendText(chatID, "err_invalid_tz", tzName)
-			// return
-		}
+      // 1) Load the timezone
+      loc, err := time.LoadLocation(tzName)
+      if err != nil {
+        // Option A: Send raw error message
+        msg := tgbotapi.NewMessage(chatID,
+          fmt.Sprintf("❌ 无效时区：%s", tzName))
+        msg.ParseMode = "Markdown"
+        bot.Send(msg)
+        return
+        // Option B: Use sendText, need to add err_invalid_tz key to messages
+        // sendText(chatID, "err_invalid_tz", tzName)
+        // return
+      }
 
-		// 2) 语法+范围校验
-		expr, err := cronexpr.Parse(spec)
-		if err != nil {
-			msg := tgbotapi.NewMessage(chatID,
-				fmt.Sprintf("❌ Cron 表达式解析失败：%s", err.Error()))
-			msg.ParseMode = "Markdown"
-			bot.Send(msg)
-			return
-		}
-      // 存储
+      // 2) Syntax and range validation
+      expr, err := cronexpr.Parse(spec)
+      if err != nil {
+        msg := tgbotapi.NewMessage(chatID,
+          fmt.Sprintf("❌ Cron 表达式解析失败：%s", err.Error()))
+        msg.ParseMode = "Markdown"
+        bot.Send(msg)
+        return
+      }
+      // Store
       r := Reminder{
         ID:           int(time.Now().UnixNano() % 1e6),
         Name:         text,
@@ -430,7 +438,7 @@ func handleMessage(msg *tgbotapi.Message) {
       }
       ud.Reminders = append(ud.Reminders, r)
       saveStorage()
-      // 启动
+      // Start cron job
       quit := make(chan struct{})
       cronQuitMap[r.ID] = quit
       go runExprJob(chatID, r, expr, loc, quit)
@@ -439,7 +447,7 @@ func handleMessage(msg *tgbotapi.Message) {
     }
   }
 
-  // 会话流程：一次性提醒
+  // Session flow: one-time reminder
   switch s.Stage {
   case StageName:
     s.Temp.Name = msg.Text
@@ -448,9 +456,11 @@ func handleMessage(msg *tgbotapi.Message) {
     m := tgbotapi.NewMessage(chatID, messages["prompt_date"][ud.Lang])
     m.ReplyMarkup = kb
     bot.Send(m)
+
   case StageOptInfo:
     s.Temp.OptInfo = msg.Text
     finalizeReminder(s)
+
   case StageAskInfo:
     lower := strings.ToLower(msg.Text)
     yes := messages["btn_yes"][ud.Lang]
@@ -463,7 +473,7 @@ func handleMessage(msg *tgbotapi.Message) {
   }
 }
 
-// --------- Callback 处理 ---------
+// --------- Callback Handling ---------
 func handleCallback(q *tgbotapi.CallbackQuery) {
   chatID := q.Message.Chat.ID
   ud := getUserData(chatID)
@@ -496,7 +506,7 @@ func handleCallback(q *tgbotapi.CallbackQuery) {
     return
   }
 
-  // 日期选择
+  // Date selection
   if s.Stage == StageDate {
     ok, y, m, d := ProcessCalendar(q)
     if ok {
@@ -510,7 +520,7 @@ func handleCallback(q *tgbotapi.CallbackQuery) {
     return
   }
 
-  // 时间选择
+  // Time selection
   if s.Stage == StageTime {
     ok, h, mi, ap := ProcessClock(q)
     if ok {
@@ -531,7 +541,7 @@ func handleCallback(q *tgbotapi.CallbackQuery) {
     return
   }
 
-  // askinfo
+  // Ask for extra information
   if s.Stage == StageAskInfo && (data == "askinfo_yes" || data == "askinfo_no") {
     if data == "askinfo_yes" {
       s.Stage = StageOptInfo
@@ -559,7 +569,7 @@ func handleCallback(q *tgbotapi.CallbackQuery) {
   bot.Request(tgbotapi.NewCallback(q.ID, ""))
 }
 
-// --------- 日历 ---------
+// --------- Calendar ---------
 func CreateCalendar(year, month int) tgbotapi.InlineKeyboardMarkup {
   var rows [][]tgbotapi.InlineKeyboardButton
   rows = append(rows, tgbotapi.NewInlineKeyboardRow(
@@ -643,7 +653,7 @@ func ProcessCalendar(q *tgbotapi.CallbackQuery) (bool, int, int, int) {
   return false, 0, 0, 0
 }
 
-// --------- 时钟 ---------
+// --------- Clock ---------
 func CreateClock(hour, minute int, ampm string) tgbotapi.InlineKeyboardMarkup {
   r1 := tgbotapi.NewInlineKeyboardRow(
     tgbotapi.NewInlineKeyboardButtonData("↑h", fmt.Sprintf("PLUS-HOUR;%d;%d;%s", hour, minute, ampm)),
@@ -715,7 +725,7 @@ func ProcessClock(q *tgbotapi.CallbackQuery) (bool, int, int, string) {
   return false, 0, 0, ""
 }
 
-// --------- 时区 ---------
+// --------- Timezone ---------
 func CreateTimezone(offset int) tgbotapi.InlineKeyboardMarkup {
   return tgbotapi.NewInlineKeyboardMarkup(
     tgbotapi.NewInlineKeyboardRow(tgbotapi.NewInlineKeyboardButtonData("↑", fmt.Sprintf("PLUS;%d", offset))),
@@ -762,12 +772,12 @@ func main() {
     log.Fatalf("load reminder.json failed: %v", err)
   }
 
-  // 恢复所有持久化的任务：一次性 + Cron
+  // Restore all persisted tasks: one-time and cron
   for k, ud := range store.Reminder {
     chatID, _ := strconv.ParseInt(k, 10, 64)
     for _, r := range ud.Reminders {
       if r.CronExpr != "" {
-        // 重新调度 cronexpr 任务
+        // Reschedule cronexpr tasks
         loc, err := time.LoadLocation(r.TZ)
         if err != nil {
           continue
