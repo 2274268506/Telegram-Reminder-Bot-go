@@ -112,12 +112,12 @@ Schedule a recurring Cron-style reminder.
 
 Example:  
 ```
-/cron 0 11 1 * * Asia/Shanghai 月报提醒
+/cron 0 11 1 * * Asia/Shanghai Monthly Report Reminder
 ```
 
 On success you’ll see:  
 ```
-✅ Cron reminder set: `0 11 1 * *` ⇒ 月报提醒
+✅ Cron reminder set: `0 11 1 * *` ⇒ Monthly Report Reminder
 ```
 
 ---
@@ -200,5 +200,6 @@ docker run -d \
 
 
 https://github.com/dome272/Telegram-Reminder-Bot
+
 
 
