@@ -62,7 +62,7 @@ Built with
    go mod tidy
    ```
 
-3. Create `config.json` in project root  
+3.  In the config.json file, enter your Telegram Bot Token
    ```jsonc
    {
      "token": "YOUR_TELEGRAM_BOT_TOKEN"
@@ -200,4 +200,5 @@ docker run -d \
 
 
 https://github.com/dome272/Telegram-Reminder-Bot
+
 
