@@ -53,8 +53,8 @@ Built with
 
 1. Clone the repo  
    ```bash
-   git clone https://github.com/yourname/telegram-reminder-bot.git
-   cd telegram-reminder-bot
+   git clone https://github.com/2274268506/Telegram-Reminder-Bot-go.git
+   cd Telegram-Reminder-Bot-go
    ```
 
 2. Initialize modules & download deps  
@@ -200,3 +200,4 @@ docker run -d \
 
 
 https://github.com/dome272/Telegram-Reminder-Bot
+
